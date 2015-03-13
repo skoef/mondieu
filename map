@@ -1,0 +1,49 @@
+#!/bin/sh
+MONDIEUBASE=/home/reinier/mondieu
+WORKDIR=${MONDIEUBASE}/work/
+PUBDIR=${MONDIEUBASE}/pub/
+RELEASE=10.1-RELEASE
+RELEASEP=/home/reinier/${RELEASE}/amd64/release/R/trees/
+KEYP=/home/reinier/mondieu.pub.key
+PARTS="kernel base doc games src lib32"
+
+set -e
+
+echo "Creating indexes for ${RELEASE}"
+
+mkdir -p ${PUBDIR}/${RELEASE}
+echo -n "Indexing "
+: > ${PUBDIR}/${RELEASE}/index.map
+for PART in $PARTS; do
+    if [ ! -d ${RELEASEP}/${PART} ]; then
+        echo -n "${PART} not found "
+        continue;
+    fi
+
+    echo -n "${PART} "
+
+    : > ${PUBDIR}/${RELEASE}/${PART}.map
+    for F in $(cd ${RELEASEP}/${PART}; find ./); do
+        NAME=$(echo ${F} | sed 's/^\.//')
+        OWNER=$(stat -f %Su ${RELEASEP}/${PART}/${F})
+        GROUP=$(stat -f %Sg ${RELEASEP}/${PART}/${F})
+        MODE=$(stat -f %Op ${RELEASEP}/${PART}/${F} | sed -E 's/.*([0-9]{4})$/\1/')
+        FLAGS=$(stat -f %Sf ${RELEASEP}/${PART}/${F})
+        LINK=$(readlink ${RELEASEP}/${PART}/${F} || true)
+        if [ -d ${RELEASEP}/${PART}/${F} ]; then
+            TYPE=d
+        elif [ -L ${RELEASEP}/${PART}/${F} ]; then
+            TYPE=L
+        else
+            TYPE=f
+            HASH=$(sha256 -q ${RELEASEP}/${PART}/${F})
+        fi
+        echo "${NAME}|${TYPE}|${OWNER}|${GROUP}|${MODE}|${FLAGS}|${HASH}|${LINK}" >> ${PUBDIR}/${RELEASE}/${PART}.map
+    done
+
+        echo "${PART}|$(sha256 -q ${PUBDIR}/${RELEASE}/${PART}.map)" >> ${PUBDIR}/${RELEASE}/index.map
+done
+echo "done"
+
+echo "Signing indexes"
+openssl rsautl -inkey ${KEYP} -sign < ${PUBDIR}/${RELEASE}/index.map > ${PUBDIR}/${RELEASE}/index.sign
