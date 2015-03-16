@@ -2,8 +2,6 @@
 
 # TODO: how to detect files that are deprecated/delete old files
 # TODO: perform signature checking
-# TODO: check for /etc/ files and offer diffing them
-# TODO: cleanup after succesful/broken run
 # TODO: when /boot/gptboot or /boot/gptzfsboot changes, warn
 # TODO: do staging and samef/samegz all in one run
 
@@ -39,7 +37,22 @@ samegz () {
 
 unstage() {
     local name=$(echo $1 | sed -e 's/\[/\\\[/g' -e 's/\]/\\\]/g')
-    sed -i '' "\#|${name}|#d" ${TMP}/stage.list
+    local stagefile=${TMP}/stage.list
+    local delim="|"
+    [ $# -gt 1 ] && stagefile=$2
+    [ $# -gt 2 ] && delim=$3
+    sed -i '' "\#${delim}${name}${delim}#d" ${stagefile}
+}
+
+checkyesno() {
+    case ${1} in
+        [Yy][Ee][Ss]|[Yy])
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 cleanup() {
@@ -191,8 +204,50 @@ log_end_msg
  awk -F'|' '{if ($3 == "f") {print $2}}' ${TMP}/stage.list | sort) | ${PAGER}
 
 # get confirmation to apply upgrade
-echo "Installing upgrade to ${UPGRADE}, proceed?"
-read FOO
+echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
+read CONFIRM
+if ! checkyesno ${CONFIRM}; then
+    exit
+fi
+
+if [ "$(wc -l < ${TMP}/etcdiff.list)" -gt 0 ]; then
+    cat <<-EOF
+We will now interactively merge your configuration files with the
+new release's. For each part choose whether you want the left (l or 1)
+or right (r or 2) side of the diff. You can also edit a part before
+chosing it, with el/e1 and er/e2 for left and right respectively.
+
+If you decide to stop during merging, none of your current config files
+will be touched.
+
+Press any key to proceed:
+EOF
+read DISCARD
+
+    cat ${TMP}/etcdiff.list | while read file; do
+        case ${file} in
+            # Don't merge these -- we're rebuild them
+            # after updates are installed.
+            /etc/spwd.db | /etc/pwd.db | /etc/login.conf.db)
+                ;;
+
+            # Invoke sdiff to merge files interactively
+            *)
+                if ! cmp ${ROOT}/${file} ${RELEASE}/${file}; then
+                    echo "==> Merging file: ${file}"
+                    if ! sdiff -s -w $(tput cols) -o ${RELEASE}/${file}.new ${ROOT}/${file} ${RELEASE}/${file} < /dev/tty && [ $? -eq 2 ]; then
+                        echo "Merge aborted at ${file}"
+                        exit
+                    fi
+
+                    mv ${RELEASE}/${file}.new ${RELEASE}/${file}
+                fi
+                ;;
+        esac
+
+        unstage ${file} ${TMP}/etcdiff.list ""
+    done
+fi
 
 log_begin_msg "Moving files into place"
 tr '|' ' ' < ${TMP}/stage.list | \
