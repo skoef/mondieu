@@ -1,18 +1,17 @@
 #!/bin/sh
 
 # TODO: how to detect files that are deprecated/delete old files
-# TODO: perform signature checking
+# TODO: perform signature checking of release archives
 # TODO: when /boot/gptboot or /boot/gptzfsboot changes, warn
-# TODO: do staging and samef/samegz all in one run
+# TODO: look into etcupdate
+# TODO: automatically detect right parts to deploy
 
 set -e
 
 ROOT=/mnt
-BASEDIR=/tmp/mondieu
-RELEASE=${BASEDIR}/release
-TMP=${BASEDIR}/tmp
 UPGRADE=10.1-TRANSBSD
 URL=http://mondieu.skoef.net/${UPGRADE}
+PARTS="kernel base"
 : ${PAGER=/usr/bin/more}
 
 # detect if file is the same, besides the $FreeBSD$ part
@@ -72,59 +71,136 @@ log_end_msg() {
     echo "done"
 }
 
+indicate() {
+    case ${__INDICATOR} in
+        '|')
+            __INDICATOR="/"
+            ;;
+        '/')
+            __INDICATOR="-"
+            ;;
+        '-')
+            __INDICATOR="\\"
+            ;;
+        '\\')
+            __INDICATOR="|"
+            ;;
+        *)
+            __INDICATOR='/'
+            ;;
+    esac
+    printf "\b${__INDICATOR}"
+}
+
+# sanity checks
+if ! echo ${PARTS} | grep -qw kernel || \
+    ! echo ${PARTS} | grep -qw base; then
+    cat <<- EOF
+Your \$PARTS should at least contain \`kernel'
+and \`base'.
+EOF
+    exit 1
+fi
+
 log_begin_msg "Preparing work space"
+
+BASEDIR=$(mktemp -d /tmp/mondieu.XXXX)
+RELEASE=${BASEDIR}/release
+TMP=${BASEDIR}/tmp
+
 cleanup 1
 trap "cleanup" EXIT INT
-[ ! -d ${BASEDIR} ] && mkdir ${BASEDIR}
 mkdir ${TMP} ${RELEASE}
 log_end_msg
 
-log_begin_msg "Fetching main index"
-fetch -q -o ${TMP} ${URL}/index.map ${URL}/index.sign
-log_end_msg
+# fetch archives and extract all files
+log_begin_msg "Fetching release ${UPGRADE}"
 
+# prepare release dir
+if [ -d ${RELEASE} ]; then
+    find ${RELEASE} -flags +schg -exec chflags noschg {} \;
+    rm -r ${RELEASE}
+fi
+mkdir -p ${RELEASE}
 
-log_begin_msg "Fetching available indexes"
-tr '|' ' ' < ${TMP}/index.map | while read index signature; do
-    fetch -q -o ${TMP} ${URL}/${index}.map
-    if [ "$(sha256 -q ${TMP}/${index}.map)" != "${signature}" ]; then
-        echo "Checksum mismatch in index ${index}"
-        exit 1
-    fi
+for part in ${PARTS}; do
+    echo -n "${part} "
+    fetch -q -o - ${URL}/${part}.txz | \
+        tar -Jxf - -C ${RELEASE}/
 done
 log_end_msg
 
-# go over all files in each index
+# go over all files in extracted release
 # if file is not present in current fs
-# or hash is not matching, it should be staged
+# or signature is not matching, it should be staged
 : > ${TMP}/stage.list
-log_begin_msg "Examining diffs"
-for MAP in $(cd ${TMP}; find . -name '*.map' ! -name 'index.map'); do
-    part=$(basename ${MAP} | sed -e 's/\.map$//')
-    echo -n "${part} "
-    tr '|' ' ' < ${TMP}/${MAP} | \
-    while read file type owner group mode flags signature link; do
-        stage=1
-        case $type in
-            d)
-                [ -d ${ROOT}${file} ] && stage=0
-                ;;
-            f)
-                [ -f ${ROOT}${file} ] && [ "$(sha256 -q ${ROOT}${file})" = "${signature}" ] && stage=0
-                ;;
-            L)
-                [ -L ${ROOT}${file} ] && [ "$(readlink ${ROOT}${file})" = "${link}" ] && stage=0
-                ;;
-            *)
-                echo "Unknown type ${type} (${file})"
-                exit
-                ;;
-        esac
+: > ${TMP}/etcdiff.list
+log_begin_msg "Comparing ${UPGRADE} to current release"
+echo -n " " # padding indicator
+for file in $(cd ${RELEASE}; find ./); do
+    # gather info of files
+    file=$(echo ${file} | sed 's/^\.//')
+    spath="${RELEASE}/${file}"
+    dpath="${ROOT}/${file}"
+    owner=$(stat -f %Su ${spath})
+    group=$(stat -f %Sg ${spath})
+    mode=$(stat -f %Op ${spath} | sed -E 's/.*([0-9]{4})$/\1/')
+    flags=$(stat -f %Sf ${spath})
+    link=$(readlink ${spath} || true)
+    if [ -d ${spath} ]; then
+        type=d
+    elif [ -L ${spath} ]; then
+        type=L
+    else
+        type=f
+        signature=$(sha256 -q ${spath})
+    fi
 
-        if [ ${stage} -eq 1 ]; then
-            echo "${part}|${file}|${type}|${owner}|${group}|${mode}|${flags}|${signature}|${link}" >> ${TMP}/stage.list
-        fi
-    done
+    indicate
+
+    case $type in
+        d)
+            # we stage all directories
+            # so we can set the right flags later on
+            ;;
+        f)
+            # if file already exists, try to detect whether
+            # it should be staged or not
+            if [ -f ${dpath} ]; then
+                # don't stage identical files
+                if [ "$(sha256 -q ${dpath})" = "${signature}" ]; then
+                    continue
+                fi
+
+                # check if anything beside FreeBSD header
+                # was even changed
+                if echo ${file} | grep -q '\.gz$' && \
+                    samegz ${spath} ${dpath}; then
+                    continue
+                elif samef ${spath} ${dpath}; then
+                    continue
+                fi
+
+                # don't add base configuration to stage
+                if echo ${file} | grep -q '^/etc/'; then
+                    echo ${file} >> ${TMP}/etcdiff.list
+                    continue
+                fi
+            fi
+            ;;
+        L)
+            # check where link is pointing to
+            if [ -L ${dpath} ] && [ "$(readlink ${dpath})" = "${link}" ]; then
+                continue
+            fi
+            ;;
+        *)
+            echo "Unknown type ${type} (${file})"
+            exit 1
+            ;;
+    esac
+
+    echo "${file}|${type}|${owner}|${group}|${mode}|${flags}|${signature}|${link}" >> ${TMP}/stage.list
 done
 log_end_msg
 
@@ -135,73 +211,10 @@ if [ ${STAGECOUNT} -eq 0 ]; then
     exit
 fi
 
-# fetch archives and extract all files
-log_begin_msg "Fetching release"
-
-if [ -d ${RELEASE} ]; then
-    find ${RELEASE} -flags +schg -exec chflags noschg {} \;
-    rm -r ${RELEASE}
-fi
-mkdir -p ${RELEASE}
-
-awk -F'|' '{print $1}' ${TMP}/stage.list | sort -u | while read package; do
-    echo -n "${package} "
-    fetch -q -o - ${URL}/archives/${package}.txz | \
-        tar -Jxf - -C ${RELEASE}/
-done
-log_end_msg
-
-# check signature and move files to staging
-log_begin_msg "Checking integrity for ${STAGECOUNT} files"
-: > ${TMP}/etcdiff.list
-tr '|' ' ' < ${TMP}/stage.list | \
-while read package file type owner group mode flags signature link; do
-    if [ "${type}" != "f" ]; then
-        continue
-    fi
-
-    if [ ! -f ${RELEASE}${file} ]; then
-        echo "${file} should be there, but is missing"
-        exit 1
-    fi
-
-    if [ "$(sha256 -q ${RELEASE}${file})" != "${signature}" ]; then
-        echo "error: ${file} did not match signature ${signature}"
-        exit 1
-    fi
-
-    # see if anything else diffs besides FreeBSD marker
-    if file -b ${RELEASE}${file} | grep -q "ASCII text" && \
-        [ -f $file ]; then
-        if samef ${file} ${RELEASE}${file}; then
-            unstage ${file}
-            continue
-        fi
-
-        # record updated files in /etc
-        # so we can offer user to merge/diff them
-        # later on
-        if echo ${file} | grep -q '^/etc/'; then
-            unstage ${file}
-            echo ${file} >> ${TMP}/etcdiff.list
-        fi
-
-        continue
-    fi
-
-    # filter same compressed files
-    if file -b ${RELEASE}${file} | grep -q 'gzip' && \
-        [ -f ${file} ] && samegz ${file} ${RELEASE}${file}; then
-        unstage ${file}
-        continue
-    fi
-done
-log_end_msg
-
 # show summary
 (echo -n "The following files will be updated/added "; \
  echo "as part of upgrading to ${UPGRADE}:"; \
- awk -F'|' '{if ($3 == "f") {print $2}}' ${TMP}/stage.list | sort) | ${PAGER}
+ awk -F'|' '{if ($2 == "f") {print $1}}' ${TMP}/stage.list | sort) | ${PAGER}
 
 # get confirmation to apply upgrade
 echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
@@ -250,8 +263,12 @@ read DISCARD
 fi
 
 log_begin_msg "Moving files into place"
+echo -n " " # padding indicator
 tr '|' ' ' < ${TMP}/stage.list | \
-    while read package file type owner group mode flags signature link; do
+    while read file type owner group mode flags signature link; do
+
+    indicate
+
     case $type in
         d)
             # Create a directory
@@ -280,8 +297,12 @@ done
 log_end_msg
 
 log_begin_msg "Setting flags"
+echo -n " " # padding indicator
 tr '|' ' ' < ${TMP}/stage.list | \
-    while read package file type owner group mode flags signature link; do
+    while read file type owner group mode flags signature link; do
+
+    indicate
+
     if [ "${type}" = "f" ] && \
         ! [ "${flags}" != "" ]; then
         chflags ${flags} ${ROOT}/${file}
