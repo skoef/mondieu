@@ -5,14 +5,10 @@
 # TODO: when /boot/gptboot or /boot/gptzfsboot changes, warn
 # TODO: look into etcupdate
 # TODO: automatically detect right parts to deploy
+# TODO: support release on local filesystem
 
 set -e
 
-ROOT=/mnt
-UPGRADE=10.1-TRANSBSD
-URL=http://mondieu.skoef.net/${UPGRADE}
-PARTS="kernel base"
-: ${PAGER=/usr/bin/more}
 
 # detect if file is the same, besides the $FreeBSD$ part
 samef () {
@@ -92,21 +88,89 @@ indicate() {
     printf "\b${__INDICATOR}"
 }
 
-# sanity checks
-if ! echo ${PARTS} | grep -qw kernel || \
-    ! echo ${PARTS} | grep -qw base; then
+usage() {
     cat <<- EOF
-Your \$PARTS should at least contain \`kernel'
-and \`base'.
+Usage: $(basename ${0}) [-d /chroot] [-p parts,to,install] [-u URL] RELEASE
+
+    Required arguments:
+        RELEASE the name of the release you want to upgrade to
+
+    Optional arguments:
+        -d Alternative chroot                  (default: /)
+        -p specify release parts to install    (default: kernel,base)
+           comma-separated
+        -u URL to location of release archives (default: ftp.freebsd.org)
+
+    Reinier Schoof <reinier@skoef.nl>
+
+    https://github.com/skoef/mondieu
+
 EOF
+}
+
+# default settings
+: ${PAGER=/usr/bin/more}
+PARTS="kernel,base"
+ROOT="/"
+ARCH=$(uname -m)
+URL=http://ftp.freebsd.org/pub/FreeBSD/releases/${ARCH}/
+
+# parse command line arguments
+if [ $# -eq 0 ]; then
+    echo "Error: arguments required" >&2
+    usage
     exit 1
 fi
+
+while getopts 'd:hp:u:' opt; do
+    case $opt in
+        d)
+            if [ ! -d ${OPTARG} ]; then
+                echo "Error: chroot ${OPTARG} doesn't exists" >&2
+                usage
+                exit 1
+            fi
+
+            if [ ! -d ${OPTARG}/etc ]; then
+                echo "Error: chroot ${OPTARG} doesn't seem to contain a FreeBSD release" >&2
+                usage
+                exit 1
+            fi
+
+            ROOT=${OPTARG}
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        p)
+            if ! echo ${OPTARG} | grep -qw base; then
+                echo "Release parts should at least include \`base'" >&2
+                usage
+                exit 1
+            fi
+
+            PARTS=${OPTARG}
+            ;;
+        u)
+            URL=${OPTARG}
+            ;;
+        \?)
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+shift $(($OPTIND - 1))
+UPGRADE=${1}
 
 log_begin_msg "Preparing work space"
 
 BASEDIR=$(mktemp -d /tmp/mondieu.XXXX)
 RELEASE=${BASEDIR}/release
 TMP=${BASEDIR}/tmp
+ARCHIVE=${BASEDIR}/archives
 
 cleanup 1
 trap "cleanup" EXIT INT
@@ -123,10 +187,15 @@ if [ -d ${RELEASE} ]; then
 fi
 mkdir -p ${RELEASE}
 
-for part in ${PARTS}; do
-    echo -n "${part} "
-    fetch -q -o - ${URL}/${part}.txz | \
-        tar -Jxf - -C ${RELEASE}/
+echo ${PARTS} | tr ',' "\n" | while read part; do
+    echo -n " ${part}"
+    if ! fetch -T 10 -o ${ARCHIVE}/${part}.txz ${URL}/${UPGRADE}/${part}.txz; then
+        echo -e "\nCould not fetch ${URL}/${UPGRADE}/${part}.txz"
+        exit 1
+    fi
+
+    tar -Jxf ${ARCHIVE}/${part}.txz -C ${RELEASE}/
+    rm ${ARCHIVE}/${part}.txz
 done
 log_end_msg
 
