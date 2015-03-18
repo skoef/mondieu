@@ -32,11 +32,8 @@ samegz () {
 
 unstage() {
     local name=$(echo $1 | sed -e 's/\[/\\\[/g' -e 's/\]/\\\]/g')
-    local stagefile=${TMP}/stage.list
-    local delim="|"
-    [ $# -gt 1 ] && stagefile=$2
-    [ $# -gt 2 ] && delim=$3
-    sed -i '' "\#${delim}${name}${delim}#d" ${stagefile}
+    local stagefile=${TMP}/etcdiff.list
+    sed -i '' "\#^${name}\$#d" ${stagefile}
 }
 
 checkyesno() {
@@ -174,7 +171,7 @@ ARCHIVE=${BASEDIR}/archives
 
 cleanup 1
 trap "cleanup" EXIT INT
-mkdir ${TMP} ${RELEASE}
+mkdir ${TMP} ${RELEASE} ${ARCHIVE}
 log_end_msg
 
 # fetch archives and extract all files
@@ -189,7 +186,7 @@ mkdir -p ${RELEASE}
 
 echo ${PARTS} | tr ',' "\n" | while read part; do
     echo -n " ${part}"
-    if ! fetch -T 10 -o ${ARCHIVE}/${part}.txz ${URL}/${UPGRADE}/${part}.txz; then
+    if ! fetch -q -T 10 -o ${ARCHIVE}/${part}.txz ${URL}/${UPGRADE}/${part}.txz; then
         echo -e "\nCould not fetch ${URL}/${UPGRADE}/${part}.txz"
         exit 1
     fi
@@ -327,7 +324,7 @@ read DISCARD
                 ;;
         esac
 
-        unstage ${file} ${TMP}/etcdiff.list ""
+        unstage ${file}
     done
 fi
 
