@@ -87,13 +87,15 @@ indicate() {
 
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-d /chroot] [-p parts,to,install] [-u URL] RELEASE
+Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
 
     Optional arguments:
+        -a Specify architecture                (default: $(uname -m))
         -d Alternative chroot                  (default: /)
+        -h Show you this help
         -p specify release parts to install    (default: kernel,base)
            comma-separated
         -u URL to location of release archives (default: ftp.freebsd.org)
@@ -110,7 +112,6 @@ EOF
 PARTS="kernel,base"
 ROOT="/"
 ARCH=$(uname -m)
-URL=http://ftp.freebsd.org/pub/FreeBSD/releases/${ARCH}/
 
 # parse command line arguments
 if [ $# -eq 0 ]; then
@@ -119,8 +120,11 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'd:hp:u:' opt; do
+while getopts 'a:d:hp:u:' opt; do
     case $opt in
+        a)
+            ARCH=${OPTARG}
+            ;;
         d)
             if [ ! -d ${OPTARG} ]; then
                 echo "Error: chroot ${OPTARG} doesn't exists" >&2
@@ -161,6 +165,7 @@ done
 
 shift $(($OPTIND - 1))
 UPGRADE=${1}
+[ -z "${URL}" ] && URL=http://ftp.freebsd.org/pub/FreeBSD/releases/${ARCH}/${UPGRADE}/
 
 log_begin_msg "Preparing work space"
 
@@ -186,8 +191,8 @@ mkdir -p ${RELEASE}
 
 echo ${PARTS} | tr ',' "\n" | while read part; do
     echo -n " ${part}"
-    if ! fetch -q -T 10 -o ${ARCHIVE}/${part}.txz ${URL}/${UPGRADE}/${part}.txz; then
-        echo -e "\nCould not fetch ${URL}/${UPGRADE}/${part}.txz"
+    if ! fetch -q -T 10 -o ${ARCHIVE}/${part}.txz ${URL}/${part}.txz; then
+        echo -e "\nCould not fetch ${URL}/${part}.txz"
         exit 1
     fi
 
