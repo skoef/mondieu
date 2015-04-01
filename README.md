@@ -17,7 +17,7 @@ Optionally, these parameters can be used to customize mondieu's behaviour:
 - **-d** alternative chroot (default: /)
 - **-h** show you these settings
 - **-p** parts of FreeBSD that are considered (default: kernel,base)
-- **-u** URL tarballs are fetched from (default: ftp://ftp.freebsd.org/pub/FreeBSD/releases/**$architecture**/**$release**/)
+- **-u** URL tarballs are fetched from (default: ftp://ftp.freebsd.org/pub/FreeBSD/releases/$architecture/$release/)
 
 ## ToDo
 - check signature of downloaded tarballs
