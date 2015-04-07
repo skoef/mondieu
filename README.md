@@ -19,6 +19,21 @@ Optionally, these parameters can be used to customize mondieu's behaviour:
 - **-p** parts of FreeBSD that are considered (default: kernel,base)
 - **-u** URL tarballs are fetched from (default: ftp://ftp.freebsd.org/pub/FreeBSD/releases/$architecture/$release/)
 
+### beadm
+Combine mondieu with [beadm](https://github.com/vermaden/beadm) to create snapshots of your current filesystem before upgrading. When everything went smoothly, activate the snapshot as you current root filesystem and boot into it or otherwise revert:
+
+```
+beadm create myupgrade
+beadm mount myupgrade /mnt
+mondieu -d /mnt 10.1-RELEASE
+beadm umount myupgrade
+beadm activate myupgrade
+reboot
+```
+
+**Note**: this will only work when your root filesystem has been prepared for this. Read beadm's [HOWTO](https://github.com/vermaden/beadm/blob/master/HOWTO.htm) for instructions how you should prepare your filesystem to benefit from beadm.
+
+
 ## ToDo
 - check signature of downloaded tarballs
 - support for tarballs on the filesystem instead of remote location
