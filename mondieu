@@ -253,7 +253,8 @@ for file in $(cd ${RELEASE}; find ./); do
                 fi
 
                 # don't add base configuration to stage
-                if echo ${file} | grep -q '^/etc/'; then
+                if echo ${file} | grep -q '^/etc/' && \
+                    ! echo ${file} | grep -q '^/etc/rc\.d/'; then
                     echo ${file} >> ${TMP}/etcdiff.list
                     continue
                 fi
