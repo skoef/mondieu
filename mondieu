@@ -12,8 +12,8 @@ set -e
 
 # detect if file is the same, besides the $FreeBSD$ part
 samef () {
-    X=`sed -E 's/\\$FreeBSD.*\\$/\$FreeBSD\$/' < $1 | sha256 -q`
-    Y=`sed -E 's/\\$FreeBSD.*\\$/\$FreeBSD\$/' < $2 | sha256 -q`
+    local X=`sed -E 's/\\$FreeBSD.*\\$/\$FreeBSD\$/' < $1 | sha256 -q`
+    local Y=`sed -E 's/\\$FreeBSD.*\\$/\$FreeBSD\$/' < $2 | sha256 -q`
 
     [ $X = $Y ] && return 0
     return 1
@@ -21,8 +21,8 @@ samef () {
 
 # gzip wrapper for samef
 samegz () {
-    X=$(mktemp ${TMP}/samegz.XXXX)
-    Y=$(mktemp ${TMP}/samegz.XXXX)
+    local X=$(mktemp ${TMP}/samegz.XXXX)
+    local Y=$(mktemp ${TMP}/samegz.XXXX)
     zcat $1 > $X
     zcat $2 > $Y
     samef $X $Y && ret=0 || ret=1
