@@ -66,28 +66,18 @@ log_end_msg() {
 
 indicate() {
     case ${__INDICATOR} in
-        '|')
-            __INDICATOR="/"
-            ;;
-        '/')
-            __INDICATOR="-"
-            ;;
-        '-')
-            __INDICATOR="\\"
-            ;;
-        '\\')
-            __INDICATOR="|"
-            ;;
-        *)
-            __INDICATOR='/'
-            ;;
+        '|') __INDICATOR="/" ;;
+        '/') __INDICATOR="-" ;;
+        '-') __INDICATOR="\\" ;;
+        '\\') __INDICATOR="|" ;;
+        *) __INDICATOR='/' ;;
     esac
     printf "\b${__INDICATOR}"
 }
 
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] RELEASE
+Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-X pattern] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
@@ -99,6 +89,8 @@ Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] RELEASE
         -p specify release parts to install    (default: kernel,base)
            comma-separated
         -u URL to location of release archives (default: ftp.freebsd.org)
+        -X skip files for manual merge when
+           matching this pattern
 
     Reinier Schoof <reinier@skoef.nl>
 
@@ -120,7 +112,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'a:d:hp:u:' opt; do
+while getopts 'a:d:hp:u:X:' opt; do
     case $opt in
         a)
             ARCH=${OPTARG}
@@ -156,6 +148,9 @@ while getopts 'a:d:hp:u:' opt; do
         u)
             URL=${OPTARG}
             ;;
+        X)
+            EXCLUDE_PTR=${OPTARG}
+            ;;
         \?)
             usage
             exit 1
@@ -190,7 +185,7 @@ fi
 mkdir -p ${RELEASE}
 
 echo ${PARTS} | tr ',' "\n" | while read part; do
-    echo -n " ${part}"
+    echo -n "${part} "
     if ! fetch -q -T 10 -o ${ARCHIVE}/${part}.txz ${URL}/${part}.txz; then
         echo -e "\nCould not fetch ${URL}/${part}.txz"
         exit 1
@@ -254,7 +249,7 @@ for file in $(cd ${RELEASE}; find ./); do
 
                 # don't add base configuration to stage
                 if echo ${file} | grep -q '^/etc/' && \
-                    ! echo ${file} | grep -q '^/etc/rc\.d/'; then
+                    ! echo ${file} | grep -qE '^/etc/(rc\.d|mtree|defaults)/'; then
                     echo ${file} >> ${TMP}/etcdiff.list
                     continue
                 fi
@@ -300,7 +295,7 @@ if [ "$(wc -l < ${TMP}/etcdiff.list)" -gt 0 ]; then
 We will now interactively merge your configuration files with the
 new release's. For each part choose whether you want the left (l or 1)
 or right (r or 2) side of the diff. You can also edit a part before
-chosing it, with el/e1 and er/e2 for left and right respectively.
+choosing it, with el/e1 and er/e2 for left and right respectively.
 
 If you decide to stop during merging, none of your current config files
 will be touched.
@@ -318,7 +313,10 @@ read DISCARD
 
             # Invoke sdiff to merge files interactively
             *)
-                if ! cmp ${ROOT}/${file} ${RELEASE}/${file}; then
+                # check if we should exclude this file
+                if ([ -z "${EXCLUDE_PTR}" ] || \
+                  ! grep -qi -E "${EXCLUDE_PTR}" ${ROOT}/${file}) && \
+                  ! cmp ${ROOT}/${file} ${RELEASE}/${file}; then
                     echo "==> Merging file: ${file}"
                     if ! sdiff -s -w $(tput cols) -o ${RELEASE}/${file}.new ${ROOT}/${file} ${RELEASE}/${file} < /dev/tty && [ $? -eq 2 ]; then
                         echo "Merge aborted at ${file}"
