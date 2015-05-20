@@ -85,7 +85,7 @@ indicate() {
 
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-X pattern] RELEASE
+Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-w file] [-x file] [-X pattern] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
@@ -97,9 +97,11 @@ Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-X pat
         -p specify release parts to install    (default: kernel,base)
            comma-separated
         -u URL to location of release archives (default: ftp.freebsd.org)
+        -w don't manually merge these files
+           but overwrite with new version
+        -x ignore files for manual merge
         -X ignore files for manual merge when
            matching this pattern.
-           Only applies to files in /etc
 
     $(date "+%Y") (c) Reinier Schoof <reinier@skoef.nl>
 
@@ -121,7 +123,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'a:d:hp:u:X:' opt; do
+while getopts 'a:d:hp:u:w:x:X:' opt; do
     case $opt in
         a)
             ARCH=${OPTARG}
@@ -156,6 +158,13 @@ while getopts 'a:d:hp:u:X:' opt; do
             ;;
         u)
             URL=${OPTARG}
+            ;;
+
+        w)
+            OVERWRITE=${OPTARG}
+            ;;
+        x)
+            EXCLUDE=${OPTARG}
             ;;
         X)
             EXCLUDE_PTR=${OPTARG}
@@ -320,12 +329,20 @@ read DISCARD
             /etc/spwd.db | /etc/pwd.db | /etc/login.conf.db)
                 ;;
 
-            # Invoke sdiff to merge files interactively
             *)
+                # if file was marked for overwrite
+                # we just copy the file and move on
+                if [ ! -z "${OVERWRITE}" ] && \
+                    echo ${OVERWRITE} | grep -qw ${file}; then
+                    cp -p ${RELEASE}/${file} ${ROOT}/${file}
+                # invoke sdiff to merge files interactively
                 # but only if the file does not match
                 # a potential exclude pattern
-                if ([ -z "${EXCLUDE_PTR}" ] || \
+                # or is listed for exclusion
+                elif ([ -z "${EXCLUDE_PTR}" ] || \
                   ! grep -qi -E "${EXCLUDE_PTR}" ${ROOT}/${file}) && \
+                  ([ -z "${EXCLUDE}" ] || \
+                  ! echo ${EXCLUDE} | grep -qw ${file}) && \
                   ! cmp ${ROOT}/${file} ${RELEASE}/${file}; then
                     echo "==> Merging file: ${file}"
                     if ! sdiff -s -w $(tput cols) -o ${RELEASE}/${file}.new ${ROOT}/${file} ${RELEASE}/${file} < /dev/tty && [ $? -eq 2 ]; then
