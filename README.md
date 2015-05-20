@@ -17,7 +17,12 @@ Optionally, these parameters can be used to customize mondieu's behaviour:
 - **-d** alternative chroot (default: /)
 - **-h** show you these settings
 - **-p** parts of FreeBSD that are considered (default: kernel,base)
+- **-w** don't manually merge these files but overwrite with new version
+- **-x** ignore files for manual merge
+- **-X** ignore files for manual merge when matching this pattern
 - **-u** URL tarballs are fetched from (default: ftp://ftp.freebsd.org/pub/FreeBSD/releases/$architecture/$release/)
+
+**Note**: both **-w** and **-x** expect a single argument, so use quotes to define more files
 
 ### beadm
 Combine mondieu with [beadm](https://github.com/vermaden/beadm) to create snapshots of your current filesystem before upgrading. When everything went smoothly, activate the snapshot as you current root filesystem and boot into it or otherwise revert:
