@@ -1,11 +1,19 @@
 #!/bin/sh
 
+#
+# mondieu, the portable alternative to freebsd-update
+#
+# Reinier Schoof <reinier@skoef.nl>
+#
+# https://github.com/skoef/mondieu
+
 # TODO: how to detect files that are deprecated/delete old files
 # TODO: perform signature checking of release archives
 # TODO: when /boot/gptboot or /boot/gptzfsboot changes, warn
 # TODO: look into etcupdate
 # TODO: automatically detect right parts to deploy
 # TODO: support release on local filesystem
+# TODO: add support for booting previous kernel
 
 set -e
 
@@ -89,10 +97,11 @@ Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-X pat
         -p specify release parts to install    (default: kernel,base)
            comma-separated
         -u URL to location of release archives (default: ftp.freebsd.org)
-        -X skip files for manual merge when
-           matching this pattern
+        -X ignore files for manual merge when
+           matching this pattern.
+           Only applies to files in /etc
 
-    Reinier Schoof <reinier@skoef.nl>
+    $(date "+%Y") (c) Reinier Schoof <reinier@skoef.nl>
 
     https://github.com/skoef/mondieu
 
@@ -313,7 +322,8 @@ read DISCARD
 
             # Invoke sdiff to merge files interactively
             *)
-                # check if we should exclude this file
+                # but only if the file does not match
+                # a potential exclude pattern
                 if ([ -z "${EXCLUDE_PTR}" ] || \
                   ! grep -qi -E "${EXCLUDE_PTR}" ${ROOT}/${file}) && \
                   ! cmp ${ROOT}/${file} ${RELEASE}/${file}; then
