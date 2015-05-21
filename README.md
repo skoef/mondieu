@@ -19,6 +19,7 @@ Optionally, these parameters can be used to customize mondieu's behaviour:
 - **-p** parts of FreeBSD that are considered (default: kernel,base)
 - **-u** hostname for fetching release (default: ftp.freebsd.org)
 - **-U** specific URL for fetching release archives. This overrides -u
+- **-V** show version
 - **-w** don't manually merge these files but overwrite with new version
 - **-x** ignore files for manual merge
 - **-X** ignore files for manual merge when matching this pattern

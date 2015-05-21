@@ -83,9 +83,15 @@ indicate() {
     printf "\b${__INDICATOR}"
 }
 
+version() {
+    cat <<- EOF
+mondieu version 0.2
+EOF
+}
+
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-h] [-y] [-d /chroot] [-p parts,to,install] [-u hostname] [-U URL] [-w file] [-x file] [-X pattern] RELEASE
+Usage: $(basename ${0}) [-h] [-V] [-y] [-d /chroot] [-p parts,to,install] [-u hostname] [-U URL] [-w file] [-x file] [-X pattern] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
@@ -100,6 +106,7 @@ Usage: $(basename ${0}) [-h] [-y] [-d /chroot] [-p parts,to,install] [-u hostnam
            archives
         -U specific URL for fetching release
            archives. This overrides -u
+        -V shows version and exits
         -w don't manually merge these files
            but overwrite with new version
         -x ignore files for manual merge
@@ -131,7 +138,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'a:d:hp:u:U:w:x:X:y' opt; do
+while getopts 'a:d:hp:u:U:Vw:x:X:y' opt; do
     case $opt in
         a)
             ARCH=${OPTARG}
@@ -152,6 +159,7 @@ while getopts 'a:d:hp:u:U:w:x:X:y' opt; do
             ROOT=${OPTARG}
             ;;
         h)
+            version
             usage
             exit 0
             ;;
@@ -169,6 +177,10 @@ while getopts 'a:d:hp:u:U:w:x:X:y' opt; do
             ;;
         U)
             URL=${OPTARG}
+            ;;
+        V)
+            version
+            exit 0
             ;;
         w)
             OVERWRITE=${OPTARG}
