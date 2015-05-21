@@ -321,13 +321,13 @@ if [ ${STAGECOUNT} -eq 0 ]; then
     exit
 fi
 
-# show summary
-(echo -n "The following files will be updated/added "; \
- echo "as part of upgrading to ${UPGRADE}:"; \
- awk -F'|' '{if ($2 == "f") {print $1}}' ${TMP}/stage.list | sort) | ${PAGER}
-
-# get confirmation to apply upgrade
 if [ ${INTERACTIVE} -eq 1 ]; then
+  # show summary
+  (echo -n "The following files will be updated/added "; \
+   echo "as part of upgrading to ${UPGRADE}:"; \
+   awk -F'|' '{if ($2 == "f") {print $1}}' ${TMP}/stage.list | sort) | ${PAGER}
+
+  # get confirmation to apply upgrade
   echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
   read CONFIRM
   if ! checkyesno ${CONFIRM}; then
