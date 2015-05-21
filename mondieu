@@ -85,7 +85,7 @@ indicate() {
 
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-w file] [-x file] [-X pattern] RELEASE
+Usage: $(basename ${0}) [-h] [-y] [-d /chroot] [-p parts,to,install] [-u URL] [-w file] [-x file] [-X pattern] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
@@ -102,6 +102,9 @@ Usage: $(basename ${0}) [-h] [-d /chroot] [-p parts,to,install] [-u URL] [-w fil
         -x ignore files for manual merge
         -X ignore files for manual merge when
            matching this pattern.
+        -y don't ask for confirmation, install
+           the new files already (but still
+           require manual merge, if needed)
 
     $(date "+%Y") (c) Reinier Schoof <reinier@skoef.nl>
 
@@ -115,6 +118,7 @@ EOF
 PARTS="kernel,base"
 ROOT="/"
 ARCH=$(uname -m)
+INTERACTIVE=1
 
 # parse command line arguments
 if [ $# -eq 0 ]; then
@@ -123,7 +127,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'a:d:hp:u:w:x:X:' opt; do
+while getopts 'a:d:hp:u:w:x:X:y' opt; do
     case $opt in
         a)
             ARCH=${OPTARG}
@@ -168,6 +172,9 @@ while getopts 'a:d:hp:u:w:x:X:' opt; do
             ;;
         X)
             EXCLUDE_PTR=${OPTARG}
+            ;;
+        y)
+            INTERACTIVE=0
             ;;
         \?)
             usage
@@ -302,14 +309,17 @@ fi
  awk -F'|' '{if ($2 == "f") {print $1}}' ${TMP}/stage.list | sort) | ${PAGER}
 
 # get confirmation to apply upgrade
-echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
-read CONFIRM
-if ! checkyesno ${CONFIRM}; then
-    exit
+if [ ${INTERACTIVE} -eq 1 ]; then
+  echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
+  read CONFIRM
+  if ! checkyesno ${CONFIRM}; then
+      exit
+  fi
 fi
 
 if [ "$(wc -l < ${TMP}/etcdiff.list)" -gt 0 ]; then
-    cat <<-EOF
+    if [ ${INTERACTIVE} -eq 1 ]; then
+        cat <<-EOF
 We will now interactively merge your configuration files with the
 new release's. For each part choose whether you want the left (l or 1)
 or right (r or 2) side of the diff. You can also edit a part before
@@ -320,7 +330,8 @@ will be touched.
 
 Press any key to proceed:
 EOF
-read DISCARD
+        read DISCARD
+    fi
 
     cat ${TMP}/etcdiff.list | while read file; do
         case ${file} in
