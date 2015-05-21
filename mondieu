@@ -85,7 +85,7 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2
+mondieu version 0.2.1
 EOF
 }
 
