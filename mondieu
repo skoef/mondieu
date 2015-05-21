@@ -85,7 +85,7 @@ indicate() {
 
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-h] [-y] [-d /chroot] [-p parts,to,install] [-u URL] [-w file] [-x file] [-X pattern] RELEASE
+Usage: $(basename ${0}) [-h] [-y] [-d /chroot] [-p parts,to,install] [-u hostname] [-U URL] [-w file] [-x file] [-X pattern] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
@@ -96,7 +96,10 @@ Usage: $(basename ${0}) [-h] [-y] [-d /chroot] [-p parts,to,install] [-u URL] [-
         -h Show you this help
         -p specify release parts to install    (default: kernel,base)
            comma-separated
-        -u URL to location of release archives (default: ftp.freebsd.org)
+        -u hostname for fetching release       (default: ftp.freebsd.org)
+           archives
+        -U specific URL for fetching release
+           archives. This overrides -u
         -w don't manually merge these files
            but overwrite with new version
         -x ignore files for manual merge
@@ -118,6 +121,7 @@ EOF
 PARTS="kernel,base"
 ROOT="/"
 ARCH=$(uname -m)
+HOSTNAME="ftp.freebsd.org"
 INTERACTIVE=1
 
 # parse command line arguments
@@ -127,7 +131,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'a:d:hp:u:w:x:X:y' opt; do
+while getopts 'a:d:hp:u:U:w:x:X:y' opt; do
     case $opt in
         a)
             ARCH=${OPTARG}
@@ -161,9 +165,11 @@ while getopts 'a:d:hp:u:w:x:X:y' opt; do
             PARTS=${OPTARG}
             ;;
         u)
+            HOSTNAME=${OPTARG}
+            ;;
+        U)
             URL=${OPTARG}
             ;;
-
         w)
             OVERWRITE=${OPTARG}
             ;;
@@ -185,7 +191,7 @@ done
 
 shift $(($OPTIND - 1))
 UPGRADE=${1}
-[ -z "${URL}" ] && URL=http://ftp.freebsd.org/pub/FreeBSD/releases/${ARCH}/${UPGRADE}/
+[ -z "${URL}" ] && URL=http://${HOSTNAME}/pub/FreeBSD/releases/${ARCH}/${UPGRADE}/
 
 log_begin_msg "Preparing work space"
 
