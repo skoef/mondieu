@@ -441,6 +441,10 @@ pwd_mkdb -d ${ROOT}/etc ${ROOT}/etc/master.passwd
 cap_mkdb -f ${ROOT}/etc/login.conf.db ${ROOT}/etc/login.conf
 log_end_msg
 
+log_begin_msg "Update linker.hints"
+chroot ${ROOT} kldxref /boot/kernel
+log_end_msg
+
 cat <<- EOF
     Succesfully upgraded from $(uname -r) to ${UPGRADE}.
     You should reboot your system now, since new binaries are
