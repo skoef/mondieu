@@ -9,14 +9,11 @@
 
 # TODO: how to detect files that are deprecated/delete old files
 # TODO: perform signature checking of release archives
-# TODO: when /boot/gptboot or /boot/gptzfsboot changes, warn
 # TODO: look into etcupdate
 # TODO: automatically detect right parts to deploy
 # TODO: support release on local filesystem
-# TODO: add support for booting previous kernel
 
 set -e
-
 
 # detect if file is the same, besides the $FreeBSD$ part
 samef () {
@@ -85,7 +82,7 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2.2
+mondieu version 0.2.3
 EOF
 }
 
@@ -244,6 +241,7 @@ log_end_msg
 # or signature is not matching, it should be staged
 : > ${TMP}/stage.list
 : > ${TMP}/etcdiff.list
+FIRST_RESCUE=""
 log_begin_msg "Comparing ${UPGRADE} to current release"
 echo -n " " # padding indicator
 for file in $(cd ${RELEASE}; find ./); do
@@ -297,6 +295,21 @@ for file in $(cd ${RELEASE}; find ./); do
                     continue
                 fi
             fi
+
+            # is this a file from /rescue
+            # make sure we link them to each other
+            if echo ${file} | grep -q '^/rescue/'; then
+              # if this is the first file from /rescue
+              # we shouldn't do anything but register which
+              # file it is
+              if [ -z "${FIRST_RESCUE}" ]; then
+                FIRST_RESCUE="${file}"
+              else
+                # for all other /rescue files, the link target
+                # should be the first rescue file
+                link="${FIRST_RESCUE}"
+              fi
+            fi
             ;;
         L)
             # check where link is pointing to
@@ -321,18 +334,23 @@ if [ ${STAGECOUNT} -eq 0 ]; then
     exit
 fi
 
-if [ ${INTERACTIVE} -eq 1 ]; then
-  # show summary
-  (echo -n "The following files will be updated/added "; \
-   echo "as part of upgrading to ${UPGRADE}:"; \
-   awk -F'|' '{if ($2 == "f") {print $1}}' ${TMP}/stage.list | sort) | ${PAGER}
+SHOW_GPT_WARNING=0
+if grep -q -E '^/boot/gpt(zfs)?boot' ${TMP}/stage.list; then
+    SHOW_GPT_WARNING=1
+fi
 
-  # get confirmation to apply upgrade
-  echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
-  read CONFIRM
-  if ! checkyesno ${CONFIRM}; then
-      exit
-  fi
+if [ ${INTERACTIVE} -eq 1 ]; then
+    # show summary
+    (echo -n "The following files will be updated/added "; \
+     echo "as part of upgrading to ${UPGRADE}:"; \
+     awk -F'|' '{if ($2 == "f") {print $1}}' ${TMP}/stage.list | sort) | ${PAGER}
+
+    # get confirmation to apply upgrade
+    echo -n "Installing upgrade to ${UPGRADE}, proceed? [y/n]: "
+    read CONFIRM
+    if ! checkyesno ${CONFIRM}; then
+        exit
+    fi
 fi
 
 if [ "$(wc -l < ${TMP}/etcdiff.list)" -gt 0 ]; then
@@ -450,3 +468,18 @@ cat <<- EOF
     You should reboot your system now, since new binaries are
     expecting to run under the new kernel.
 EOF
+
+if [ ${SHOW_GPT_WARNING} -eq 1 ]; then
+    cat <<- EOF
+
+    WARNING: during this upgrade, either gptboot or gptzfsboot was
+    upgraded as well. If you use GPT partitioning and the GPT boot
+    loader, you should update your boot partition as well. For
+    instance like this:
+
+    gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 da0
+
+    assuming da0 is your boot device and you're using the non-ZFS
+    GPT boot loader.
+EOF
+fi
