@@ -82,7 +82,7 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2.3
+mondieu version 0.2.4
 EOF
 }
 
@@ -199,7 +199,13 @@ while getopts 'a:d:hp:u:U:Vw:x:X:y' opt; do
 done
 
 shift $(($OPTIND - 1))
+
 UPGRADE=${1}
+if [ -z "${UPGRADE}" ]; then
+    usage
+    exit 1
+fi
+
 [ -z "${URL}" ] && URL=http://${HOSTNAME}/pub/FreeBSD/releases/${ARCH}/${UPGRADE}/
 
 log_begin_msg "Preparing work space"
