@@ -55,7 +55,7 @@ checkyesno() {
 cleanup() {
     local quiet=$1
     [ -z "${quiet}" ] && log_begin_msg "Cleaning up"
-    find ${TMP} ${RELEASE} -flags +schg -exec chflags noschg {} \; 2>/dev/null || true
+    find ${BASEDIR} -flags +schg -exec chflags noschg {} \; 2>/dev/null || true
     rm -rf ${BASEDIR}
     [ -z "${quiet}" ] && log_end_msg
     return 0
@@ -82,7 +82,7 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2.5
+mondieu version 0.2.6
 EOF
 }
 
@@ -215,7 +215,6 @@ RELEASE=${BASEDIR}/release
 TMP=${BASEDIR}/tmp
 ARCHIVE=${BASEDIR}/archives
 
-cleanup 1
 trap "cleanup" EXIT INT
 mkdir ${TMP} ${RELEASE} ${ARCHIVE}
 log_end_msg
