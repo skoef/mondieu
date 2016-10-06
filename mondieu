@@ -82,7 +82,7 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2.6
+mondieu version 0.2.7
 EOF
 }
 
@@ -482,9 +482,9 @@ if [ ${SHOW_GPT_WARNING} -eq 1 ]; then
     loader, you should update your boot partition as well. For
     instance like this:
 
-    gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 da0
+    gpart bootcode -b ${ROOT}/boot/pmbr -p ${ROOT}/boot/gptzfsboot -i 1 da0
 
-    assuming da0 is your boot device and you're using the non-ZFS
-    GPT boot loader.
+    assuming da0 is your boot device and you're using the ZFS GPT
+    boot loader.
 EOF
 fi
