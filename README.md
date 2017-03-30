@@ -16,6 +16,7 @@ Optionally, these parameters can be used to customize mondieu's behaviour:
 - **-a** architecture (default: current architecture)
 - **-d** alternative chroot (default: /)
 - **-h** show you these settings
+- **-F** run `freebsd-update fetch install' afterwards
 - **-p** parts of FreeBSD that are considered (default: kernel,base)
 - **-u** hostname for fetching release (default: ftp.freebsd.org)
 - **-U** specific URL for fetching release archives. This overrides -u

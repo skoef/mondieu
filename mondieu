@@ -55,6 +55,9 @@ checkyesno() {
 cleanup() {
     local quiet=$1
     [ -z "${quiet}" ] && log_begin_msg "Cleaning up"
+    if [ ${FREEBSDUPDATE} -eq 1 ] && [ -f ${ROOT}/usr/bin/uname.orig ]; then
+        mv ${ROOT}/usr/bin/uname.orig ${ROOT}/usr/bin/uname
+    fi
     find ${BASEDIR} -flags +schg -exec chflags noschg {} \; 2>/dev/null || true
     rm -rf ${BASEDIR}
     [ -z "${quiet}" ] && log_end_msg
@@ -82,13 +85,13 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2.7
+mondieu version 0.2.8
 EOF
 }
 
 usage() {
     cat <<- EOF
-Usage: $(basename ${0}) [-h] [-V] [-y] [-d /chroot] [-p parts,to,install] [-u hostname] [-U URL] [-w file] [-x file] [-X pattern] RELEASE
+Usage: $(basename ${0}) [-h] [-F] [-V] [-y] [-d /chroot] [-p parts,to,install] [-u hostname] [-U URL] [-w file] [-x file] [-X pattern] RELEASE
 
     Required arguments:
         RELEASE the name of the release you want to upgrade to
@@ -96,6 +99,8 @@ Usage: $(basename ${0}) [-h] [-V] [-y] [-d /chroot] [-p parts,to,install] [-u ho
     Optional arguments:
         -a Specify architecture                (default: $(uname -m))
         -d Alternative chroot                  (default: /)
+        -F run freebsd-update fetch install
+           afterwards
         -h Show you this help
         -p specify release parts to install    (default: kernel,base)
            comma-separated
@@ -127,6 +132,7 @@ ROOT="/"
 ARCH=$(uname -m)
 HOSTNAME="ftp.freebsd.org"
 INTERACTIVE=1
+FREEBSDUPDATE=0
 
 # parse command line arguments
 if [ $# -eq 0 ]; then
@@ -135,7 +141,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'a:d:hp:u:U:Vw:x:X:y' opt; do
+while getopts 'a:d:Fhp:u:U:Vw:x:X:y' opt; do
     case $opt in
         a)
             ARCH=${OPTARG}
@@ -154,6 +160,9 @@ while getopts 'a:d:hp:u:U:Vw:x:X:y' opt; do
             fi
 
             ROOT=${OPTARG}
+            ;;
+        F)
+            FREEBSDUPDATE=1
             ;;
         h)
             version
@@ -467,6 +476,26 @@ log_end_msg
 log_begin_msg "Update linker.hints"
 chroot ${ROOT} kldxref /boot/kernel
 log_end_msg
+
+# run freebsd-update in new environment
+if [ ${FREEBSDUPDATE} -eq 1 ]; then
+    log_begin_msg "Running freebsd-update in ${ROOT}"
+    # fake the uname command
+    # freebsd-update gets the kernel version from uname
+    # since we might have upgrade to a different version
+    # fake the version temporarily
+    mv ${ROOT}/usr/bin/uname ${ROOT}/usr/bin/uname.orig
+    cat > ${ROOT}/usr/bin/uname <<- EOF
+#!/bin/sh
+UNAME=/usr/bin/uname.orig
+\${UNAME} \$@ | sed "s/\$(\${UNAME} -r)/${UPGRADE}/g"
+EOF
+    chmod +x ${ROOT}/usr/bin/uname
+    # we want this update to run non-interactively
+    PAGER=cat chroot ${ROOT} freebsd-update fetch install >/dev/null
+	mv ${ROOT}/usr/bin/uname.orig ${ROOT}/usr/bin/uname
+    log_end_msg
+fi
 
 cat <<- EOF
     Succesfully upgraded from $(uname -r) to ${UPGRADE}.
