@@ -85,7 +85,7 @@ indicate() {
 
 version() {
     cat <<- EOF
-mondieu version 0.2.8
+mondieu version 0.2.9
 EOF
 }
 
@@ -426,6 +426,7 @@ tr '|' ' ' < ${TMP}/stage.list | \
     while read file type owner group mode flags signature link; do
 
     indicate
+    [ -e ${ROOT}/${file} ] && chflags noschg ${ROOT}/${file}
 
     case $type in
         d)
@@ -461,8 +462,7 @@ tr '|' ' ' < ${TMP}/stage.list | \
 
     indicate
 
-    if [ "${type}" = "f" ] && \
-        ! [ "${flags}" != "" ]; then
+    if [ ! -z "${flags}" ]; then
         chflags ${flags} ${ROOT}/${file}
     fi
     done
